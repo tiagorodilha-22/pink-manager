@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage'
 import AgendamentosPage from './pages/AgendamentosPage'
 import OSListPage from './pages/OSListPage'
 import OSDetailPage from './pages/OSDetailPage'
+import NovaOSPage from './pages/NovaOSPage'
 import ClientesPage from './pages/ClientesPage'
 import ConciliacaoPage from './pages/financeiro/ConciliacaoPage'
 import ExtratoPage from './pages/financeiro/ExtratoPage'
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="agendamentos" element={<AgendamentosPage />} />
           <Route path="os" element={<OSListPage />} />
+          <Route path="os/nova" element={<NovaOSPage />} />
           <Route path="os/:id" element={<OSDetailPage />} />
           <Route path="clientes" element={<ClientesPage />} />
           <Route path="financeiro/conciliacao" element={<ConciliacaoPage />} />

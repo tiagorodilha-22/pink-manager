@@ -50,7 +50,7 @@ export default function OSListPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-900">Ordens de Serviço</h1>
-        <button className="btn-primary" onClick={() => navigate('/os/nova')}>
+        <button className="btn-primary" onClick={() => navigate('nova')}>
           <Plus className="w-4 h-4" /> Nova OS
         </button>
       </div>
