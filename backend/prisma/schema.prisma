@@ -1,0 +1,377 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────────
+
+model Usuario {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  perfil    Perfil
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("usuarios")
+}
+
+enum Perfil {
+  ADMIN
+  RECEPCAO
+  TECNICO
+  FINANCEIRO
+}
+
+// ─────────────────────────────────────────────
+// RECEPÇÃO
+// ─────────────────────────────────────────────
+
+model Cliente {
+  id        String   @id @default(uuid())
+  nome      String
+  cpfCnpj   String?  @unique
+  telefone  String
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  veiculos     Veiculo[]
+  agendamentos Agendamento[]
+
+  @@map("clientes")
+}
+
+model Veiculo {
+  id        String  @id @default(uuid())
+  clienteId String
+  placa     String  @unique
+  marca     String
+  modelo    String
+  ano       Int
+  cor       String?
+  km        Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cliente      Cliente        @relation(fields: [clienteId], references: [id])
+  agendamentos Agendamento[]
+  ordens       OrdemServico[]
+
+  @@map("veiculos")
+}
+
+model Agendamento {
+  id          String            @id @default(uuid())
+  clienteId   String
+  veiculoId   String
+  dataHora    DateTime
+  tipoServico String
+  queixa      String?
+  status      StatusAgendamento @default(PENDENTE)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  cliente Cliente      @relation(fields: [clienteId], references: [id])
+  veiculo Veiculo      @relation(fields: [veiculoId], references: [id])
+  os      OrdemServico?
+
+  @@map("agendamentos")
+}
+
+enum StatusAgendamento {
+  PENDENTE
+  CONFIRMADO
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+// ─────────────────────────────────────────────
+// ORDEM DE SERVIÇO
+// ─────────────────────────────────────────────
+
+model OrdemServico {
+  id            String   @id @default(uuid())
+  numero        Int      @unique @default(autoincrement())
+  veiculoId     String
+  agendamentoId String?  @unique
+  queixa        String
+  status        StatusOS @default(RECEPCAO)
+  valorTotal    Decimal  @default(0) @db.Decimal(10, 2)
+  valorPago     Decimal  @default(0) @db.Decimal(10, 2)
+  observacoes   String?
+  dataEntrada   DateTime @default(now())
+  dataPrevista  DateTime?
+  dataEntrega   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  veiculo     Veiculo        @relation(fields: [veiculoId], references: [id])
+  agendamento Agendamento?   @relation(fields: [agendamentoId], references: [id])
+  checklist   ChecklistItem[]
+  diagnostico Diagnostico?
+  orcamento   Orcamento?
+  itens       ItemOS[]
+  pagamentos  Pagamento[]
+  historico   HistoricoOS[]
+
+  @@map("ordens_servico")
+}
+
+enum StatusOS {
+  RECEPCAO
+  DIAGNOSTICO
+  AGUARDANDO_APROVACAO
+  APROVADA
+  EM_MANUTENCAO
+  VALIDACAO
+  AGUARDANDO_RETIRADA
+  ENTREGUE
+  CANCELADA
+}
+
+model ChecklistItem {
+  id    String  @id @default(uuid())
+  osId  String
+  campo String
+  valor Boolean
+  obs   String?
+
+  os OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_itens")
+}
+
+model Diagnostico {
+  id          String   @id @default(uuid())
+  osId        String   @unique
+  descricao   String
+  tecnicoNome String?
+  createdAt   DateTime @default(now())
+
+  os OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+
+  @@map("diagnosticos")
+}
+
+model Orcamento {
+  id           String          @id @default(uuid())
+  osId         String          @unique
+  status       StatusOrcamento @default(PENDENTE)
+  valorPecas   Decimal         @default(0) @db.Decimal(10, 2)
+  valorMO      Decimal         @default(0) @db.Decimal(10, 2)
+  valorTotal   Decimal         @default(0) @db.Decimal(10, 2)
+  prazoEntrega DateTime?
+  observacoes  String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  os    OrdemServico    @relation(fields: [osId], references: [id], onDelete: Cascade)
+  itens ItemOrcamento[]
+
+  @@map("orcamentos")
+}
+
+enum StatusOrcamento {
+  PENDENTE
+  ENVIADO
+  APROVADO
+  REPROVADO
+  RENEGOCIANDO
+}
+
+model ItemOrcamento {
+  id           String   @id @default(uuid())
+  orcamentoId  String
+  tipo         TipoItem
+  descricao    String
+  quantidade   Decimal  @db.Decimal(10, 3)
+  valorUnit    Decimal  @db.Decimal(10, 2)
+  valorTotal   Decimal  @db.Decimal(10, 2)
+  fornecedorId String?
+
+  orcamento  Orcamento  @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  fornecedor Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  @@map("itens_orcamento")
+}
+
+model ItemOS {
+  id         String   @id @default(uuid())
+  osId       String
+  tipo       TipoItem
+  descricao  String
+  quantidade Decimal  @db.Decimal(10, 3)
+  valorUnit  Decimal  @db.Decimal(10, 2)
+  valorTotal Decimal  @db.Decimal(10, 2)
+
+  os OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+
+  @@map("itens_os")
+}
+
+enum TipoItem {
+  PECA
+  MAO_OBRA
+  OUTROS
+}
+
+model Fornecedor {
+  id       String  @id @default(uuid())
+  nome     String
+  contato  String?
+  telefone String?
+  email    String?
+  ativo    Boolean @default(true)
+
+  itens ItemOrcamento[]
+
+  @@map("fornecedores")
+}
+
+model HistoricoOS {
+  id           String    @id @default(uuid())
+  osId         String
+  statusAntes  StatusOS?
+  statusDepois StatusOS
+  obs          String?
+  usuarioNome  String?
+  createdAt    DateTime  @default(now())
+
+  os OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+
+  @@map("historico_os")
+}
+
+// ─────────────────────────────────────────────
+// FINANCEIRO
+// ─────────────────────────────────────────────
+
+model Pagamento {
+  id           String            @id @default(uuid())
+  osId         String
+  metodo       MetodoPagamento
+  adquirente   Adquirente?
+  nsu          String?
+  valor        Decimal           @db.Decimal(10, 2)
+  qtdParcelas  Int               @default(1)
+  statusConcil StatusConciliacao @default(PENDENTE)
+  createdAt    DateTime          @default(now())
+
+  os           OrdemServico     @relation(fields: [osId], references: [id])
+  parcelas     ParcelaReceber[]
+  conciliacoes Conciliacao[]
+
+  @@map("pagamentos")
+}
+
+enum MetodoPagamento {
+  PIX
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  DINHEIRO
+  TRANSFERENCIA
+}
+
+enum Adquirente {
+  REDE
+  STONE
+  CIELO
+  PAGSEGURO
+  OUTROS
+}
+
+enum StatusConciliacao {
+  PENDENTE
+  PARCIAL
+  CONCILIADO
+  NAO_IDENTIFICADO
+}
+
+model ParcelaReceber {
+  id           String    @id @default(uuid())
+  pagamentoId  String
+  numero       Int
+  valor        Decimal   @db.Decimal(10, 2)
+  dataPrevista DateTime
+  dataRecebida DateTime?
+  conciliado   Boolean   @default(false)
+  lancamentoId String?
+
+  pagamento  Pagamento          @relation(fields: [pagamentoId], references: [id], onDelete: Cascade)
+  lancamento LancamentoExtrato? @relation(fields: [lancamentoId], references: [id])
+
+  @@map("parcelas_receber")
+}
+
+model LancamentoExtrato {
+  id          String        @id @default(uuid())
+  origem      OrigemExtrato
+  data        DateTime
+  descricao   String
+  valor       Decimal       @db.Decimal(10, 2)
+  nsuRef      String?
+  conciliado  Boolean       @default(false)
+  importadoEm DateTime      @default(now())
+  hashUnico   String        @unique
+
+  parcelas     ParcelaReceber[]
+  conciliacoes Conciliacao[]
+
+  @@map("lancamentos_extrato")
+}
+
+enum OrigemExtrato {
+  INTER_OFX
+  REDE_CSV
+  STONE_CSV
+  MANUAL
+}
+
+model Conciliacao {
+  id           String    @id @default(uuid())
+  pagamentoId  String
+  lancamentoId String
+  valorConcil  Decimal   @db.Decimal(10, 2)
+  tipoMatch    TipoMatch
+  createdAt    DateTime  @default(now())
+
+  pagamento  Pagamento         @relation(fields: [pagamentoId], references: [id])
+  lancamento LancamentoExtrato @relation(fields: [lancamentoId], references: [id])
+
+  @@map("conciliacoes")
+}
+
+enum TipoMatch {
+  AUTOMATICO
+  MANUAL
+}
+
+model LancamentoCaixa {
+  id        String    @id @default(uuid())
+  tipo      TipoCaixa
+  valor     Decimal   @db.Decimal(10, 2)
+  descricao String
+  osId      String?
+  data      DateTime  @default(now())
+  createdAt DateTime  @default(now())
+
+  @@map("lancamentos_caixa")
+}
+
+enum TipoCaixa {
+  ENTRADA
+  SAIDA
+  SANGRIA
+  DEPOSITO
+}

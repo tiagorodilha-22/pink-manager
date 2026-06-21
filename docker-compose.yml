@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pink-manager-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pink
+      POSTGRES_PASSWORD: pink123
+      POSTGRES_DB: pink_manager
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: pink-manager-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://pink:pink123@postgres:5432/pink_manager
+      JWT_SECRET: change_this_in_production
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build: ./frontend
+    container_name: pink-manager-web
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
