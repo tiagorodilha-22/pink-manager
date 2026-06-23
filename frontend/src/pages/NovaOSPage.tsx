@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
-import { ArrowLeft, ClipboardList } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, ClipboardList, ChevronDown, Plus } from 'lucide-react'
 import { api } from '../lib/api'
 import ClienteVeiculoSelector from '../components/ClienteVeiculoSelector'
+
+interface Servico {
+  id: string; nome: string; descricao: string | null
+  duracaoHoras: number; precoBase: number; precoHora: number
+}
 
 const CHECKLIST_CAMPOS = [
   { key: 'para_choque_dianteiro', label: 'Para-choque dianteiro' },
@@ -22,8 +27,18 @@ const CHECKLIST_CAMPOS = [
 
 export default function NovaOSPage() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
 
-  const [veiculoId, setVeiculoId] = useState('')
+  const [veiculoId,  setVeiculoId]  = useState('')
+  const [servicoId,  setServicoId]  = useState('')
+
+  // Novo serviço inline
+  const [showNovoServico,     setShowNovoServico]     = useState(false)
+  const [novoServicoNome,     setNovoServicoNome]     = useState('')
+  const [novoServicoDuracao,  setNovoServicoDuracao]  = useState('1')
+  const [novoServicoBase,     setNovoServicoBase]     = useState('0')
+  const [novoServicoHora,     setNovoServicoHora]     = useState('0')
+  const [erroServico,         setErroServico]         = useState('')
   const [queixa, setQueixa] = useState('')
   const [dataPrevista, setDataPrevista] = useState('')
   const [observacoes, setObservacoes] = useState('')
@@ -34,10 +49,49 @@ export default function NovaOSPage() {
   const [checklistObs, setChecklistObs] = useState<Record<string, string>>({})
   const [selecionado, setSelecionado] = useState<{ clienteNome: string; veiculoDesc: string } | null>(null)
 
+  const { data: servicos = [] } = useQuery<Servico[]>({
+    queryKey: ['servicos'],
+    queryFn:  () => api.get('/servicos').then(r => r.data),
+  })
+
+  function selecionarServico(id: string) {
+    setServicoId(id)
+    const s = servicos.find(x => x.id === id)
+    if (s && !queixa) setQueixa(s.nome)
+  }
+
+  const criarServico = useMutation({
+    mutationFn: () => api.post('/servicos', {
+      nome:         novoServicoNome.trim(),
+      duracaoHoras: Number(novoServicoDuracao),
+      precoBase:    Number(novoServicoBase),
+      precoHora:    Number(novoServicoHora),
+    }),
+    onSuccess: async (res) => {
+      await qc.invalidateQueries({ queryKey: ['servicos'] })
+      selecionarServico(res.data.id)
+      setShowNovoServico(false)
+      setNovoServicoNome('')
+      setNovoServicoDuracao('1')
+      setNovoServicoBase('0')
+      setNovoServicoHora('0')
+      setErroServico('')
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setErroServico(msg ?? 'Erro ao criar serviço.')
+    },
+  })
+
+  function fmt(v: number) {
+    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  }
+
   const criarOS = useMutation({
     mutationFn: () =>
       api.post('/os', {
         veiculoId,
+        servicoId: servicoId || undefined,
         queixa,
         dataPrevista: dataPrevista ? new Date(dataPrevista).toISOString() : undefined,
         observacoes,
@@ -89,10 +143,100 @@ export default function NovaOSPage() {
           />
         </div>
 
+        {/* Tipo de Serviço */}
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+              <span className="w-5 h-5 bg-pink-600 text-white rounded-full text-xs flex items-center justify-center font-bold">2</span>
+              Tipo de serviço
+              <span className="text-xs font-normal text-gray-400">opcional</span>
+            </h2>
+            <button
+              type="button"
+              className="flex items-center gap-1 text-xs text-pink-600 hover:text-pink-700 font-medium"
+              onClick={() => { setShowNovoServico(v => !v); setErroServico('') }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              {showNovoServico ? 'Cancelar' : 'Novo serviço'}
+            </button>
+          </div>
+
+          {showNovoServico ? (
+            <div className="border border-pink-200 rounded-xl p-3 bg-pink-50/50 space-y-3">
+              <p className="text-xs font-semibold text-pink-700">Criar novo serviço</p>
+              <input
+                className="input text-sm"
+                placeholder="Nome do serviço *"
+                value={novoServicoNome}
+                onChange={e => setNovoServicoNome(e.target.value)}
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Duração (h)</label>
+                  <input className="input text-sm" type="number" min="0.25" step="0.25"
+                    value={novoServicoDuracao} onChange={e => setNovoServicoDuracao(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Preço base (R$)</label>
+                  <input className="input text-sm" type="number" min="0" step="0.01"
+                    value={novoServicoBase} onChange={e => setNovoServicoBase(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Hora/Homem (R$/h)</label>
+                  <input className="input text-sm" type="number" min="0" step="0.01"
+                    value={novoServicoHora} onChange={e => setNovoServicoHora(e.target.value)} />
+                </div>
+              </div>
+              {erroServico && <p className="text-xs text-red-600">{erroServico}</p>}
+              <button
+                type="button"
+                className="btn-primary text-sm w-full justify-center"
+                disabled={criarServico.isPending || !novoServicoNome.trim()}
+                onClick={() => {
+                  if (!novoServicoNome.trim()) { setErroServico('Informe o nome'); return }
+                  setErroServico('')
+                  criarServico.mutate()
+                }}
+              >
+                {criarServico.isPending ? 'Criando…' : 'Criar e selecionar'}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="relative">
+                <select
+                  className="input appearance-none pr-8"
+                  value={servicoId}
+                  onChange={e => selecionarServico(e.target.value)}
+                >
+                  <option value="">Selecionar da tabela de serviços…</option>
+                  {servicos.map(s => (
+                    <option key={s.id} value={s.id}>{s.nome}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-3.5 text-gray-400 pointer-events-none" />
+              </div>
+              {servicoId && (() => {
+                const s = servicos.find(x => x.id === servicoId)
+                if (!s) return null
+                const total = s.precoBase + s.precoHora * s.duracaoHoras
+                return (
+                  <div className="mt-3 bg-pink-50 rounded-xl p-3 text-sm flex items-center gap-4 flex-wrap">
+                    <span className="text-gray-600">Duração: <strong>{s.duracaoHoras}h</strong></span>
+                    <span className="text-gray-600">Base: <strong>{fmt(s.precoBase)}</strong></span>
+                    <span className="text-gray-600">H/H: <strong>{fmt(s.precoHora)}/h</strong></span>
+                    <span className="text-pink-700 font-semibold ml-auto">Total: {fmt(total)}</span>
+                  </div>
+                )
+              })()}
+            </>
+          )}
+        </div>
+
         {/* Queixa + Info */}
         <div className="card p-5">
           <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <span className="w-5 h-5 bg-pink-600 text-white rounded-full text-xs flex items-center justify-center font-bold">2</span>
+            <span className="w-5 h-5 bg-pink-600 text-white rounded-full text-xs flex items-center justify-center font-bold">3</span>
             Queixa e informações
           </h2>
           <div className="space-y-4">
@@ -132,7 +276,7 @@ export default function NovaOSPage() {
         {/* Checklist */}
         <div className="card p-5">
           <h2 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
-            <span className="w-5 h-5 bg-pink-600 text-white rounded-full text-xs flex items-center justify-center font-bold">3</span>
+            <span className="w-5 h-5 bg-pink-600 text-white rounded-full text-xs flex items-center justify-center font-bold">4</span>
             Checklist de entrada
           </h2>
           <p className="text-xs text-gray-400 mb-4 ml-7">Marque os itens que estão em bom estado. Desmarque os que apresentam problemas.</p>

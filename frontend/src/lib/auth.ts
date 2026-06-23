@@ -5,6 +5,8 @@ export interface Usuario {
   nome: string
   email: string
   perfil: 'ADMIN' | 'RECEPCAO' | 'TECNICO' | 'FINANCEIRO'
+  filialId:   string | null
+  filialNome: string | null
 }
 
 export async function login(email: string, senha: string): Promise<Usuario> {

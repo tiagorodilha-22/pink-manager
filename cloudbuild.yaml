@@ -1,0 +1,74 @@
+# Pink Manager — Cloud Build CI/CD
+# Trigger: push para branch main
+#
+# Pré-requisitos no GCP:
+#   1. Artifact Registry: crie o repositório Docker chamado "pink-manager"
+#      gcloud artifacts repositories create pink-manager \
+#        --repository-format=docker --location=southamerica-east1
+#
+#   2. Secret Manager: crie os secrets abaixo
+#      gcloud secrets create DATABASE_URL    --data-file=-  <<< "postgresql://..."
+#      gcloud secrets create JWT_SECRET      --data-file=-  <<< "sua_chave_secreta"
+#      gcloud secrets create GCS_BUCKET      --data-file=-  <<< "nome-do-bucket"
+#      gcloud secrets create NOME_OFICINA    --data-file=-  <<< "Nome da Oficina"
+#      (Opcionais: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM,
+#                  ZAPI_INSTANCE_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN,
+#                  ANTHROPIC_API_KEY, FRONTEND_URL)
+#
+#   3. Service Account do Cloud Build precisa de:
+#      - roles/run.admin
+#      - roles/iam.serviceAccountUser
+#      - roles/secretmanager.secretAccessor
+#      - roles/artifactregistry.writer
+
+steps:
+  # ── 1. Build da imagem Docker ─────────────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: build
+    args:
+      - build
+      - --tag=$_IMAGE:$SHORT_SHA
+      - --tag=$_IMAGE:latest
+      - --cache-from=$_IMAGE:latest
+      - ./backend
+
+  # ── 2. Push para Artifact Registry ───────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: push
+    waitFor: [build]
+    args:
+      - push
+      - --all-tags
+      - $_IMAGE
+
+  # ── 3. Deploy no Cloud Run ────────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy
+    waitFor: [push]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE
+      - --image=$_IMAGE:$SHORT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --allow-unauthenticated
+      - --min-instances=0
+      - --max-instances=10
+      - --memory=512Mi
+      - --cpu=1
+      - --set-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GCS_BUCKET=GCS_BUCKET:latest,NOME_OFICINA=NOME_OFICINA:latest
+
+substitutions:
+  _REGION:  southamerica-east1
+  _SERVICE: pink-manager-api
+  _REPO:    pink-manager
+  _IMAGE:   ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}
+
+images:
+  - $_IMAGE:$SHORT_SHA
+  - $_IMAGE:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY

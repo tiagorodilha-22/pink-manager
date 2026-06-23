@@ -11,20 +11,27 @@ export default async function authRoutes(app: FastifyInstance) {
       senha: z.string().min(6),
     }).parse(req.body)
 
-    const usuario = await prisma.usuario.findUnique({ where: { email: body.email } })
+    const usuario = await prisma.usuario.findUnique({
+      where: { email: body.email },
+      include: { filial: { select: { id: true, nome: true } } },
+    })
     if (!usuario || !usuario.ativo) throw new AppError('Credenciais inválidas', 401)
 
     const senhaOk = await bcrypt.compare(body.senha, usuario.senha)
     if (!senhaOk) throw new AppError('Credenciais inválidas', 401)
 
     const token = app.jwt.sign(
-      { id: usuario.id, perfil: usuario.perfil },
+      { id: usuario.id, perfil: usuario.perfil, filialId: usuario.filialId ?? null },
       { expiresIn: '8h' },
     )
 
     return reply.send({
       token,
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, perfil: usuario.perfil },
+      usuario: {
+        id: usuario.id, nome: usuario.nome, email: usuario.email, perfil: usuario.perfil,
+        filialId:   usuario.filialId   ?? null,
+        filialNome: usuario.filial?.nome ?? null,
+      },
     })
   })
 

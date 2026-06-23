@@ -5,10 +5,11 @@ import { authenticate } from '../../../shared/auth.middleware'
 import { NotFoundError } from '../../../shared/errors'
 
 const clienteSchema = z.object({
-  nome: z.string().min(2),
-  cpfCnpj: z.string().optional(),
+  nome:     z.string().min(2),
+  cpfCnpj:  z.string().optional(),
   telefone: z.string().min(8),
-  email: z.string().email().optional(),
+  email:    z.string().email().optional(),
+  genero:   z.enum(['M', 'F']).optional(),
 })
 
 export default async function clientesRoutes(app: FastifyInstance) {
@@ -17,7 +18,7 @@ export default async function clientesRoutes(app: FastifyInstance) {
   app.get('/', async (req) => {
     const { q } = req.query as { q?: string }
     return prisma.cliente.findMany({
-      where: q ? { nome: { contains: q, mode: 'insensitive' } } : undefined,
+      where: q ? { nome: { contains: q } } : undefined,
       include: { veiculos: { select: { id: true, placa: true, modelo: true } } },
       orderBy: { nome: 'asc' },
     })

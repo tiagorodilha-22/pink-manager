@@ -85,6 +85,7 @@ async function main() {
   // OS de exemplo
   const os1 = await prisma.ordemServico.create({
     data: {
+      numero: 1,
       veiculoId: civicJoao.id,
       queixa: 'Veículo com barulho ao frear e vibração no volante em alta velocidade.',
       status: 'AGUARDANDO_APROVACAO',
@@ -138,6 +139,7 @@ async function main() {
   // OS em manutenção (com pagamento parcial)
   const os2 = await prisma.ordemServico.create({
     data: {
+      numero: 2,
       veiculoId: corollaMaria.id,
       queixa: 'Troca de óleo e filtros + verificação geral.',
       status: 'EM_MANUTENCAO',
@@ -173,6 +175,7 @@ async function main() {
   // OS com pagamento cartão parcelado (conciliação pendente)
   const os3 = await prisma.ordemServico.create({
     data: {
+      numero: 3,
       veiculoId: hb20Pedro.id,
       queixa: 'Revisão completa 30.000 km.',
       status: 'ENTREGUE',

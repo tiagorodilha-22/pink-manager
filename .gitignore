@@ -12,6 +12,18 @@ build/
 
 # Prisma
 backend/prisma/migrations/*.sql
+backend/prisma/*.db
+backend/prisma/*.db-journal
+
+# Uploads (arquivos locais de dev)
+backend/uploads/
+uploads/
+
+# Temp
+status.html
+
+# Claude
+**/.claude/
 
 # Logs
 *.log

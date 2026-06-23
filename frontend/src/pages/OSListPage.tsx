@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Crown } from 'lucide-react'
 import { useState } from 'react'
 import { api } from '../lib/api'
 import dayjs from 'dayjs'
@@ -107,7 +107,12 @@ export default function OSListPage() {
                   onClick={() => navigate(`/os/${os.id}`)}
                 >
                   <td className="px-4 py-3 font-mono font-semibold text-pink-700">#{os.numero as number}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{cliente.nome ?? '—'}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    <span className="flex items-center gap-1.5">
+                      {cliente.nome ?? '—'}
+                      {cliente.genero === 'F' && <Crown className="w-3.5 h-3.5 text-pink-400 flex-shrink-0" />}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{veiculo?.marca as string} {veiculo?.modelo as string}</td>
                   <td className="px-4 py-3 font-mono text-gray-600">{veiculo?.placa as string}</td>
                   <td className="px-4 py-3">

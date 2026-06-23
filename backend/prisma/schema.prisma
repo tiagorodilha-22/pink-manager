@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -16,19 +16,15 @@ model Usuario {
   nome      String
   email     String   @unique
   senha     String
-  perfil    Perfil
+  perfil    String
+  filialId  String?
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("usuarios")
-}
+  filial Filial? @relation(fields: [filialId], references: [id])
 
-enum Perfil {
-  ADMIN
-  RECEPCAO
-  TECNICO
-  FINANCEIRO
+  @@map("usuarios")
 }
 
 // ─────────────────────────────────────────────
@@ -41,6 +37,7 @@ model Cliente {
   cpfCnpj   String?  @unique
   telefone  String
   email     String?
+  genero    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -66,34 +63,27 @@ model Veiculo {
   cliente      Cliente        @relation(fields: [clienteId], references: [id])
   agendamentos Agendamento[]
   ordens       OrdemServico[]
+  manutencoes  ManutencaoVeiculo[]
 
   @@map("veiculos")
 }
 
 model Agendamento {
-  id          String            @id @default(uuid())
+  id          String   @id @default(uuid())
   clienteId   String
-  veiculoId   String
+  veiculoId   String?
   dataHora    DateTime
   tipoServico String
   queixa      String?
-  status      StatusAgendamento @default(PENDENTE)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  status      String   @default("PENDENTE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   cliente Cliente      @relation(fields: [clienteId], references: [id])
-  veiculo Veiculo      @relation(fields: [veiculoId], references: [id])
+  veiculo Veiculo?     @relation(fields: [veiculoId], references: [id])
   os      OrdemServico?
 
   @@map("agendamentos")
-}
-
-enum StatusAgendamento {
-  PENDENTE
-  CONFIRMADO
-  EM_ANDAMENTO
-  CONCLUIDO
-  CANCELADO
 }
 
 // ─────────────────────────────────────────────
@@ -101,43 +91,38 @@ enum StatusAgendamento {
 // ─────────────────────────────────────────────
 
 model OrdemServico {
-  id            String   @id @default(uuid())
-  numero        Int      @unique @default(autoincrement())
+  id            String    @id @default(uuid())
+  numero        Int       @unique
   veiculoId     String
-  agendamentoId String?  @unique
+  agendamentoId String?   @unique
+  filialId      String?
+  servicoId     String?
   queixa        String
-  status        StatusOS @default(RECEPCAO)
-  valorTotal    Decimal  @default(0) @db.Decimal(10, 2)
-  valorPago     Decimal  @default(0) @db.Decimal(10, 2)
+  status        String    @default("RECEPCAO")
+  portalToken   String?   @unique
+  valorTotal    Decimal   @default(0)
+  valorPago     Decimal   @default(0)
   observacoes   String?
-  dataEntrada   DateTime @default(now())
+  dataEntrada   DateTime  @default(now())
   dataPrevista  DateTime?
   dataEntrega   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   veiculo     Veiculo        @relation(fields: [veiculoId], references: [id])
   agendamento Agendamento?   @relation(fields: [agendamentoId], references: [id])
+  filial      Filial?        @relation(fields: [filialId], references: [id])
+  servico     Servico?       @relation(fields: [servicoId], references: [id])
   checklist   ChecklistItem[]
   diagnostico Diagnostico?
   orcamento   Orcamento?
   itens       ItemOS[]
   pagamentos  Pagamento[]
   historico   HistoricoOS[]
+  avaliacao   Avaliacao?
+  sugestoesIA SugestaoIA[]
 
   @@map("ordens_servico")
-}
-
-enum StatusOS {
-  RECEPCAO
-  DIAGNOSTICO
-  AGUARDANDO_APROVACAO
-  APROVADA
-  EM_MANUTENCAO
-  VALIDACAO
-  AGUARDANDO_RETIRADA
-  ENTREGUE
-  CANCELADA
 }
 
 model ChecklistItem {
@@ -159,22 +144,34 @@ model Diagnostico {
   tecnicoNome String?
   createdAt   DateTime @default(now())
 
-  os OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+  os    OrdemServico      @relation(fields: [osId], references: [id], onDelete: Cascade)
+  fotos FotoDiagnostico[]
 
   @@map("diagnosticos")
 }
 
+model FotoDiagnostico {
+  id            String      @id @default(uuid())
+  diagnosticoId String
+  filename      String
+  createdAt     DateTime    @default(now())
+
+  diagnostico Diagnostico @relation(fields: [diagnosticoId], references: [id], onDelete: Cascade)
+
+  @@map("fotos_diagnostico")
+}
+
 model Orcamento {
-  id           String          @id @default(uuid())
-  osId         String          @unique
-  status       StatusOrcamento @default(PENDENTE)
-  valorPecas   Decimal         @default(0) @db.Decimal(10, 2)
-  valorMO      Decimal         @default(0) @db.Decimal(10, 2)
-  valorTotal   Decimal         @default(0) @db.Decimal(10, 2)
+  id           String   @id @default(uuid())
+  osId         String   @unique
+  status       String   @default("PENDENTE")
+  valorPecas   Decimal  @default(0)
+  valorMO      Decimal  @default(0)
+  valorTotal   Decimal  @default(0)
   prazoEntrega DateTime?
   observacoes  String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   os    OrdemServico    @relation(fields: [osId], references: [id], onDelete: Cascade)
   itens ItemOrcamento[]
@@ -182,59 +179,48 @@ model Orcamento {
   @@map("orcamentos")
 }
 
-enum StatusOrcamento {
-  PENDENTE
-  ENVIADO
-  APROVADO
-  REPROVADO
-  RENEGOCIANDO
-}
-
 model ItemOrcamento {
-  id           String   @id @default(uuid())
+  id           String  @id @default(uuid())
   orcamentoId  String
-  tipo         TipoItem
+  tipo         String
   descricao    String
-  quantidade   Decimal  @db.Decimal(10, 3)
-  valorUnit    Decimal  @db.Decimal(10, 2)
-  valorTotal   Decimal  @db.Decimal(10, 2)
+  quantidade   Decimal
+  valorUnit    Decimal
+  valorTotal   Decimal
   fornecedorId String?
 
-  orcamento  Orcamento  @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  orcamento  Orcamento   @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
   fornecedor Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
   @@map("itens_orcamento")
 }
 
 model ItemOS {
-  id         String   @id @default(uuid())
+  id         String  @id @default(uuid())
   osId       String
-  tipo       TipoItem
+  tipo       String
   descricao  String
-  quantidade Decimal  @db.Decimal(10, 3)
-  valorUnit  Decimal  @db.Decimal(10, 2)
-  valorTotal Decimal  @db.Decimal(10, 2)
+  quantidade Decimal
+  valorUnit  Decimal
+  valorTotal Decimal
 
   os OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
 
   @@map("itens_os")
 }
 
-enum TipoItem {
-  PECA
-  MAO_OBRA
-  OUTROS
-}
-
 model Fornecedor {
   id       String  @id @default(uuid())
   nome     String
+  cnpj     String?
   contato  String?
   telefone String?
   email    String?
-  ativo    Boolean @default(true)
+  ativo    Boolean  @default(true)
+  createdAt DateTime @default(now())
 
-  itens ItemOrcamento[]
+  itens        ItemOrcamento[]
+  notasFiscais NotaFiscal[]
 
   @@map("fornecedores")
 }
@@ -242,8 +228,8 @@ model Fornecedor {
 model HistoricoOS {
   id           String    @id @default(uuid())
   osId         String
-  statusAntes  StatusOS?
-  statusDepois StatusOS
+  statusAntes  String?
+  statusDepois String
   obs          String?
   usuarioNome  String?
   createdAt    DateTime  @default(now())
@@ -258,15 +244,15 @@ model HistoricoOS {
 // ─────────────────────────────────────────────
 
 model Pagamento {
-  id           String            @id @default(uuid())
+  id           String   @id @default(uuid())
   osId         String
-  metodo       MetodoPagamento
-  adquirente   Adquirente?
+  metodo       String
+  adquirente   String?
   nsu          String?
-  valor        Decimal           @db.Decimal(10, 2)
-  qtdParcelas  Int               @default(1)
-  statusConcil StatusConciliacao @default(PENDENTE)
-  createdAt    DateTime          @default(now())
+  valor        Decimal
+  qtdParcelas  Int      @default(1)
+  statusConcil String   @default("PENDENTE")
+  createdAt    DateTime @default(now())
 
   os           OrdemServico     @relation(fields: [osId], references: [id])
   parcelas     ParcelaReceber[]
@@ -275,34 +261,11 @@ model Pagamento {
   @@map("pagamentos")
 }
 
-enum MetodoPagamento {
-  PIX
-  CARTAO_CREDITO
-  CARTAO_DEBITO
-  DINHEIRO
-  TRANSFERENCIA
-}
-
-enum Adquirente {
-  REDE
-  STONE
-  CIELO
-  PAGSEGURO
-  OUTROS
-}
-
-enum StatusConciliacao {
-  PENDENTE
-  PARCIAL
-  CONCILIADO
-  NAO_IDENTIFICADO
-}
-
 model ParcelaReceber {
   id           String    @id @default(uuid())
   pagamentoId  String
   numero       Int
-  valor        Decimal   @db.Decimal(10, 2)
+  valor        Decimal
   dataPrevista DateTime
   dataRecebida DateTime?
   conciliado   Boolean   @default(false)
@@ -315,15 +278,15 @@ model ParcelaReceber {
 }
 
 model LancamentoExtrato {
-  id          String        @id @default(uuid())
-  origem      OrigemExtrato
+  id          String   @id @default(uuid())
+  origem      String
   data        DateTime
   descricao   String
-  valor       Decimal       @db.Decimal(10, 2)
+  valor       Decimal
   nsuRef      String?
-  conciliado  Boolean       @default(false)
-  importadoEm DateTime      @default(now())
-  hashUnico   String        @unique
+  conciliado  Boolean  @default(false)
+  importadoEm DateTime @default(now())
+  hashUnico   String   @unique
 
   parcelas     ParcelaReceber[]
   conciliacoes Conciliacao[]
@@ -331,20 +294,13 @@ model LancamentoExtrato {
   @@map("lancamentos_extrato")
 }
 
-enum OrigemExtrato {
-  INTER_OFX
-  REDE_CSV
-  STONE_CSV
-  MANUAL
-}
-
 model Conciliacao {
-  id           String    @id @default(uuid())
+  id           String   @id @default(uuid())
   pagamentoId  String
   lancamentoId String
-  valorConcil  Decimal   @db.Decimal(10, 2)
-  tipoMatch    TipoMatch
-  createdAt    DateTime  @default(now())
+  valorConcil  Decimal
+  tipoMatch    String
+  createdAt    DateTime @default(now())
 
   pagamento  Pagamento         @relation(fields: [pagamentoId], references: [id])
   lancamento LancamentoExtrato @relation(fields: [lancamentoId], references: [id])
@@ -352,26 +308,231 @@ model Conciliacao {
   @@map("conciliacoes")
 }
 
-enum TipoMatch {
-  AUTOMATICO
-  MANUAL
-}
-
 model LancamentoCaixa {
-  id        String    @id @default(uuid())
-  tipo      TipoCaixa
-  valor     Decimal   @db.Decimal(10, 2)
+  id        String   @id @default(uuid())
+  tipo      String
+  valor     Decimal
   descricao String
   osId      String?
-  data      DateTime  @default(now())
-  createdAt DateTime  @default(now())
+  data      DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@map("lancamentos_caixa")
 }
 
-enum TipoCaixa {
-  ENTRADA
-  SAIDA
-  SANGRIA
-  DEPOSITO
+model ItemInventario {
+  id               String   @id @default(uuid())
+  nome             String
+  codigoInterno    String?
+  codigoFabricante String?
+  codigoBarras     String?
+  categoria        String   @default("OUTROS")
+  marca            String?
+  compatibilidade  String?
+  descricao        String?
+  unidade          String   @default("UN")
+  quantidade       Int      @default(0)
+  qtdMinima        Int      @default(1)
+  custoUnitario    Decimal  @default(0)
+  precoVenda       Decimal  @default(0)
+  localizacao      String?
+  ativo            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  movimentacoes MovimentacaoEstoque[]
+  itensNF       ItemNotaFiscal[]
+
+  @@map("inventario")
+}
+
+model MovimentacaoEstoque {
+  id         String   @id @default(uuid())
+  itemId     String
+  tipo       String
+  quantidade Int
+  motivo     String?
+  osId       String?
+  custo      Decimal  @default(0)
+  createdAt  DateTime @default(now())
+
+  item ItemInventario @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("movimentacoes_estoque")
+}
+
+model ContaPagar {
+  id             String    @id @default(uuid())
+  descricao      String
+  categoria      String    @default("OUTROS")
+  valor          Decimal
+  dataVencimento DateTime
+  dataPagamento  DateTime?
+  status         String    @default("PENDENTE")
+  observacoes    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("contas_pagar")
+}
+
+model NotaFiscal {
+  id           String    @id @default(uuid())
+  numero       String
+  serie        String?
+  fornecedorId String?
+  dataEmissao  DateTime
+  valorTotal   Decimal   @default(0)
+  fotoPath     String?
+  observacoes  String?
+  status       String    @default("PENDENTE")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  fornecedor Fornecedor?      @relation(fields: [fornecedorId], references: [id])
+  itens      ItemNotaFiscal[]
+
+  @@map("notas_fiscais")
+}
+
+model ItemNotaFiscal {
+  id               String  @id @default(uuid())
+  notaFiscalId     String
+  descricao        String
+  quantidade       Decimal
+  valorUnitario    Decimal
+  codigoFabricante String?
+  itemInventarioId String?
+
+  notaFiscal     NotaFiscal      @relation(fields: [notaFiscalId], references: [id], onDelete: Cascade)
+  itemInventario ItemInventario? @relation(fields: [itemInventarioId], references: [id])
+
+  @@map("itens_nota_fiscal")
+}
+
+// ─────────────────────────────────────────────
+// HISTÓRICO DE MANUTENÇÃO
+// ─────────────────────────────────────────────
+
+model ManutencaoVeiculo {
+  id            String    @id @default(uuid())
+  veiculoId     String
+  tipo          String
+  descricao     String?
+  kmRealizado   Int?
+  dataRealizado DateTime
+  kmProxima     Int?
+  dataProxima   DateTime?
+  osNumero      Int?
+  createdAt     DateTime  @default(now())
+
+  veiculo Veiculo          @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+  fotos   FotoManutencao[]
+
+  @@map("manutencoes_veiculo")
+}
+
+model FotoManutencao {
+  id           String   @id @default(uuid())
+  manutencaoId String
+  tipo         String   @default("GERAL")
+  filename     String
+  createdAt    DateTime @default(now())
+
+  manutencao ManutencaoVeiculo @relation(fields: [manutencaoId], references: [id], onDelete: Cascade)
+
+  @@map("fotos_manutencao")
+}
+
+// ─────────────────────────────────────────────
+// FILIAIS
+// ─────────────────────────────────────────────
+
+model Filial {
+  id        String   @id @default(uuid())
+  nome      String
+  cnpj      String?
+  endereco  String?
+  telefone  String?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuarios Usuario[]
+  ordens   OrdemServico[]
+
+  @@map("filiais")
+}
+
+// ─────────────────────────────────────────────
+// TABELA DE SERVIÇOS
+// ─────────────────────────────────────────────
+
+model Servico {
+  id           String   @id @default(uuid())
+  nome         String   @unique
+  descricao    String?
+  duracaoHoras Float    @default(1)
+  precoBase    Float    @default(0)
+  precoHora    Float    @default(0)
+  ativo        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ordens OrdemServico[]
+
+  @@map("servicos")
+}
+
+// ─────────────────────────────────────────────
+// TÉCNICOS
+// ─────────────────────────────────────────────
+
+model Tecnico {
+  id        String   @id @default(uuid())
+  nome      String
+  matricula String?
+  cargo     String   @default("MECANICO")
+  telefone  String?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tecnicos")
+}
+
+// ─────────────────────────────────────────────
+// CHECKLIST DE SUGESTÕES IA
+// ─────────────────────────────────────────────
+
+model SugestaoIA {
+  id         String   @id @default(uuid())
+  osId       String
+  descricao  String
+  prioridade String   @default("MEDIA")
+  feito      Boolean  @default(false)
+  ordem      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  os OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+
+  @@map("sugestoes_ia")
+}
+
+// ─────────────────────────────────────────────
+// AVALIAÇÃO PÓS-SERVIÇO (NPS)
+// ─────────────────────────────────────────────
+
+model Avaliacao {
+  id           String    @id @default(uuid())
+  osId         String    @unique
+  token        String    @unique
+  nota         Int?
+  comentario   String?
+  respondidoEm DateTime?
+  createdAt    DateTime  @default(now())
+
+  os OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+
+  @@map("avaliacoes")
 }
