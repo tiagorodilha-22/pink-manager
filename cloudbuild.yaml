@@ -58,7 +58,9 @@ steps:
       - --max-instances=10
       - --memory=512Mi
       - --cpu=1
-      - --set-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GCS_BUCKET=GCS_BUCKET:latest,NOME_OFICINA=NOME_OFICINA:latest
+      - --set-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GCS_BUCKET=GCS_BUCKET:latest,NOME_OFICINA=NOME_OFICINA:latest,FRONTEND_URL=FRONTEND_URL:latest
+      - --add-cloudsql-instances=$PROJECT_ID:$_REGION:pink-db-prod
+      - --service-account=76320537237-compute@developer.gserviceaccount.com
 
 substitutions:
   _REGION:  southamerica-east1
