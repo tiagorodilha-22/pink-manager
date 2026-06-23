@@ -66,7 +66,7 @@ substitutions:
   _REGION:  southamerica-east1
   _SERVICE: pink-manager-api
   _REPO:    pink-manager
-  _IMAGE:   ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}
+  _IMAGE:   ${_REGION}-docker.pkg.dev/juane-soc-prod/${_REPO}/${_SERVICE}
 
 images:
   - $_IMAGE:$SHORT_SHA
