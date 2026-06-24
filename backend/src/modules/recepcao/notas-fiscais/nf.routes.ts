@@ -1,14 +1,9 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { writeFile, readFile } from 'fs/promises'
-import { existsSync, mkdirSync } from 'fs'
-import { join } from 'path'
 import prisma from '../../../shared/prisma'
 import { authenticate } from '../../../shared/auth.middleware'
 import { AppError, NotFoundError } from '../../../shared/errors'
-
-const UPLOADS_DIR = join(process.cwd(), 'uploads')
-if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true })
+import { storeFile, fetchFile, publicUrl, fileExists } from '../../../shared/storage.service'
 
 export default async function nfRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate)
@@ -78,10 +73,8 @@ export default async function nfRoutes(app: FastifyInstance) {
 
     const ext      = data.filename.split('.').pop() ?? 'jpg'
     const filename = `nf-${id}.${ext}`
-    const filepath = join(UPLOADS_DIR, filename)
-
-    const buffer = await data.toBuffer()
-    await writeFile(filepath, buffer)
+    const buffer   = await data.toBuffer()
+    await storeFile(filename, buffer)
 
     const updated = await prisma.notaFiscal.update({ where: { id }, data: { fotoPath: filename } })
     return reply.status(200).send({ fotoPath: updated.fotoPath })
@@ -93,12 +86,13 @@ export default async function nfRoutes(app: FastifyInstance) {
     const nf = await prisma.notaFiscal.findUnique({ where: { id }, select: { fotoPath: true } })
     if (!nf?.fotoPath) throw new NotFoundError('Foto')
 
-    const filepath = join(UPLOADS_DIR, nf.fotoPath)
-    if (!existsSync(filepath)) throw new NotFoundError('Arquivo')
+    const url = publicUrl(nf.fotoPath)
+    if (url) return reply.redirect(url)
 
-    const buffer   = await readFile(filepath)
-    const ext      = nf.fotoPath.split('.').pop()?.toLowerCase() ?? 'jpg'
-    const mime     = ext === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`
+    if (!fileExists(nf.fotoPath)) throw new NotFoundError('Arquivo')
+    const buffer = await fetchFile(nf.fotoPath)
+    const ext    = nf.fotoPath.split('.').pop()?.toLowerCase() ?? 'jpg'
+    const mime   = ext === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`
     reply.header('Content-Type', mime)
     return reply.send(buffer)
   })
@@ -174,10 +168,11 @@ export default async function nfRoutes(app: FastifyInstance) {
         const inv = await tx.itemInventario.findUnique({ where: { id: inventarioId } })
         if (!inv) continue
 
+        const qtd = Math.round(Number(item.quantidade))
         await tx.itemInventario.update({
           where: { id: inventarioId },
           data:  {
-            quantidade:   inv.quantidade + Number(item.quantidade),
+            quantidade:   inv.quantidade + qtd,
             custoUnitario: item.valorUnitario,
           },
         })
@@ -186,7 +181,7 @@ export default async function nfRoutes(app: FastifyInstance) {
           data: {
             itemId:    inventarioId,
             tipo:      'ENTRADA',
-            quantidade: Number(item.quantidade),
+            quantidade: qtd,
             custo:     item.valorUnitario,
             motivo:    `NF ${nf.numero}${nf.serie ? '/' + nf.serie : ''}`,
           },

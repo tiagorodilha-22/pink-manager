@@ -141,16 +141,26 @@ function NovaNotaForm({ onClose }: { onClose: () => void }) {
 
   async function processar() {
     if (!nfId) return
-    await salvarItens()
+    const validos = itens.filter(i => i.descricao.trim())
+    if (!validos.length) { setErro('Adicione ao menos 1 item'); return }
     setProcessando(true); setErro('')
     try {
+      await api.put(`/notas-fiscais/${nfId}/itens`, {
+        itens: validos.map(i => ({
+          descricao:        i.descricao,
+          quantidade:       Number(i.quantidade),
+          valorUnitario:    Number(i.valorUnitario),
+          codigoFabricante: i.codigoFabricante || undefined,
+          itemInventarioId: i.itemInventarioId || undefined,
+        })),
+      })
       const r = await api.post(`/notas-fiscais/${nfId}/processar`)
       setResultado(r.data.mensagem)
       qc.invalidateQueries({ queryKey: ['notas-fiscais'] })
       qc.invalidateQueries({ queryKey: ['inventario'] })
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: string } } }
-      setErro(err?.response?.data?.error ?? 'Erro ao processar')
+      setErro(err?.response?.data?.error ?? 'Erro ao processar NF')
     } finally { setProcessando(false) }
   }
 
