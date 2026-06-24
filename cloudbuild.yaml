@@ -41,9 +41,9 @@ steps:
       - --all-tags
       - $_IMAGE
 
-  # ── 3. Deploy no Cloud Run ────────────────────────────────────────────────
+  # ── 3. Deploy API no Cloud Run ───────────────────────────────────────────
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: deploy
+    id: deploy-api
     waitFor: [push]
     entrypoint: gcloud
     args:
@@ -59,18 +59,60 @@ steps:
       - --memory=512Mi
       - --cpu=1
       - --set-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GCS_BUCKET=GCS_BUCKET:latest,NOME_OFICINA=NOME_OFICINA:latest,FRONTEND_URL=FRONTEND_URL:latest
-      - --add-cloudsql-instances=$PROJECT_ID:$_REGION:pink-db-prod
+      - --add-cloudsql-instances=juane-soc-prod:$_REGION:pink-db-prod
       - --service-account=76320537237-compute@developer.gserviceaccount.com
 
+  # ── 4. Build da imagem do frontend ───────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: build-web
+    waitFor: ['-']
+    args:
+      - build
+      - --tag=$_IMAGE_WEB:$SHORT_SHA
+      - --tag=$_IMAGE_WEB:latest
+      - --cache-from=$_IMAGE_WEB:latest
+      - ./frontend
+
+  # ── 5. Push da imagem do frontend ────────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: push-web
+    waitFor: [build-web]
+    args:
+      - push
+      - --all-tags
+      - $_IMAGE_WEB
+
+  # ── 6. Deploy frontend no Cloud Run ──────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-web
+    waitFor: [push-web]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE_WEB
+      - --image=$_IMAGE_WEB:$SHORT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --min-instances=0
+      - --max-instances=5
+      - --memory=256Mi
+
 substitutions:
-  _REGION:  southamerica-east1
-  _SERVICE: pink-manager-api
-  _REPO:    pink-manager
-  _IMAGE:   ${_REGION}-docker.pkg.dev/juane-soc-prod/${_REPO}/${_SERVICE}
+  _REGION:      southamerica-east1
+  _SERVICE:     pink-manager-api
+  _SERVICE_WEB: pink-manager-web
+  _REPO:        pink-manager
+  _IMAGE:       ${_REGION}-docker.pkg.dev/juane-soc-prod/${_REPO}/${_SERVICE}
+  _IMAGE_WEB:   ${_REGION}-docker.pkg.dev/juane-soc-prod/${_REPO}/${_SERVICE_WEB}
 
 images:
   - $_IMAGE:$SHORT_SHA
   - $_IMAGE:latest
+  - $_IMAGE_WEB:$SHORT_SHA
+  - $_IMAGE_WEB:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY
