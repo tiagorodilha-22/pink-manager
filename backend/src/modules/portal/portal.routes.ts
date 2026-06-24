@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { randomUUID } from 'crypto'
 import prisma from '../../shared/prisma'
 import { AppError, NotFoundError } from '../../shared/errors'
 
@@ -27,6 +28,17 @@ export default async function portalRoutes(app: FastifyInstance) {
       include: { fotos: { orderBy: { createdAt: 'asc' } } },
     })
 
+    let avaliacaoToken: string | null = null
+    let avaliacaoRespondido = false
+    if (os.status === 'ENTREGUE') {
+      let av = await prisma.avaliacao.findUnique({ where: { osId: os.id } })
+      if (!av) {
+        av = await prisma.avaliacao.create({ data: { osId: os.id, token: randomUUID() } })
+      }
+      avaliacaoToken    = av.token
+      avaliacaoRespondido = !!av.respondidoEm
+    }
+
     // Não expõe campos internos desnecessários
     return {
       numero:       os.numero,
@@ -49,6 +61,8 @@ export default async function portalRoutes(app: FastifyInstance) {
       orcamento:    os.orcamento,
       historico:    os.historico,
       manutencoes,
+      avaliacaoToken,
+      avaliacaoRespondido,
     }
   })
 

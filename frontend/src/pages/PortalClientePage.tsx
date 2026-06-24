@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import {
   Wrench, CheckCircle, Clock, XCircle, AlertCircle,
-  Gauge, CalendarClock, ChevronRight, Crown, Camera, ZoomIn, X,
+  Gauge, CalendarClock, ChevronRight, Crown, Camera, ZoomIn, X, Star,
 } from 'lucide-react'
 import axios from 'axios'
 import dayjs from 'dayjs'
@@ -47,9 +47,12 @@ const TIPO_MANUT_LABEL: Record<string, string> = {
 
 export default function PortalClientePage() {
   const { token } = useParams<{ token: string }>()
-  const [lightbox, setLightbox] = useState<string | null>(null)
-  const [motivo,   setMotivo]   = useState('')
-  const [decisao,  setDecisao]  = useState<'aprovado' | 'recusado' | null>(null)
+  const [lightbox,    setLightbox]    = useState<string | null>(null)
+  const [motivo,      setMotivo]      = useState('')
+  const [decisao,     setDecisao]     = useState<'aprovado' | 'recusado' | null>(null)
+  const [notaSel,     setNotaSel]     = useState<number | null>(null)
+  const [comentario,  setComentario]  = useState('')
+  const [avEnviada,   setAvEnviada]   = useState(false)
 
   const { data: os, isLoading, isError, refetch } = useQuery({
     queryKey: ['portal', token],
@@ -65,6 +68,14 @@ export default function PortalClientePage() {
       setDecisao(aprovado ? 'aprovado' : 'recusado')
       refetch()
     },
+  })
+
+  const enviarAvaliacao = useMutation({
+    mutationFn: () => api.post(`/avaliacoes/publica/${os?.avaliacaoToken}`, {
+      nota: notaSel,
+      comentario: comentario.trim() || undefined,
+    }),
+    onSuccess: () => setAvEnviada(true),
   })
 
   if (isLoading) return (
@@ -307,6 +318,75 @@ export default function PortalClientePage() {
             </div>
           </div>
         ))}
+
+        {/* Avaliação do serviço */}
+        {os.status === 'ENTREGUE' && os.avaliacaoToken && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
+              <Star className="w-3.5 h-3.5 text-pink-500" /> Avalie o serviço
+            </p>
+
+            {os.avaliacaoRespondido || avEnviada ? (
+              <div className="text-center py-4">
+                <p className="text-2xl mb-1">🎉</p>
+                <p className="text-sm font-semibold text-gray-800">Obrigado pela avaliação!</p>
+                <p className="text-xs text-gray-400 mt-1">Sua opinião é muito importante para nós.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 text-center mb-4">
+                  De 0 a 10, quanto você recomendaria nossos serviços?
+                </p>
+                <div className="grid grid-cols-11 gap-1 mb-1">
+                  {Array.from({ length: 11 }, (_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setNotaSel(i)}
+                      className={`h-9 rounded-lg text-sm font-semibold transition-all active:scale-95 ${
+                        notaSel === i
+                          ? i >= 9 ? 'bg-green-600 text-white shadow-md scale-110'
+                          : i >= 7 ? 'bg-amber-500 text-white shadow-md scale-110'
+                          :          'bg-red-500 text-white shadow-md scale-110'
+                          : i >= 9 ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                          : i >= 7 ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                          :          'bg-red-50 text-red-700 hover:bg-red-100'
+                      }`}
+                    >
+                      {i}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex justify-between mb-4">
+                  <span className="text-xs text-gray-400">Ruim</span>
+                  <span className="text-xs text-gray-400">Excelente</span>
+                </div>
+
+                {notaSel !== null && (
+                  <>
+                    <textarea
+                      value={comentario}
+                      onChange={e => setComentario(e.target.value)}
+                      placeholder="Comentário opcional…"
+                      rows={2}
+                      maxLength={500}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 placeholder-gray-300 resize-none focus:outline-none focus:ring-2 focus:ring-pink-300 mb-3"
+                    />
+                    <button
+                      onClick={() => enviarAvaliacao.mutate()}
+                      disabled={enviarAvaliacao.isPending}
+                      className="w-full bg-pink-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-pink-700 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {enviarAvaliacao.isPending ? 'Enviando…' : 'Enviar avaliação'}
+                    </button>
+                    {enviarAvaliacao.isError && (
+                      <p className="text-xs text-red-500 text-center mt-2">Erro ao enviar. Tente novamente.</p>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Rodapé */}
         <div className="text-center pb-8">
