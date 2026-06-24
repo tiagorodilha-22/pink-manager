@@ -5,6 +5,7 @@ import prisma from '../../../shared/prisma'
 import { authenticate } from '../../../shared/auth.middleware'
 import { parseOfx } from './parsers/ofx.parser'
 import { parseRede, parseStone } from './parsers/csv.parser'
+import { parsePdf } from './parsers/pdf.parser'
 
 export default async function extratoRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate)
@@ -55,6 +56,19 @@ export default async function extratoRoutes(app: FastifyInstance) {
 
     const lancamentos = await parseStone(conteudo)
     const resultados = await importarLancamentos(lancamentos, 'STONE_CSV')
+
+    return reply.send(resultados)
+  })
+
+  // Importar PDF ou imagem via IA
+  app.post('/importar/pdf', async (req, reply) => {
+    const { conteudo, mimeType } = z.object({
+      conteudo: z.string().min(1),
+      mimeType: z.string().min(1),
+    }).parse(req.body)
+
+    const lancamentos = await parsePdf(conteudo, mimeType)
+    const resultados = await importarLancamentos(lancamentos, 'PDF_IA')
 
     return reply.send(resultados)
   })

@@ -4,12 +4,13 @@ import { useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import dayjs from 'dayjs'
 
-type Origem = 'ofx' | 'rede' | 'stone'
+type Origem = 'ofx' | 'rede' | 'stone' | 'pdf'
 
 const ORIGENS: { key: Origem; label: string; desc: string; ext: string }[] = [
-  { key: 'ofx',   label: 'Inter (OFX)',  desc: 'Extrato bancário exportado do app ou internet banking', ext: '.ofx' },
-  { key: 'rede',  label: 'Rede (CSV)',   desc: 'Relatório de vendas do portal Meu Posto Rede',          ext: '.csv' },
-  { key: 'stone', label: 'Stone (CSV)',  desc: 'Relatório de transações do portal Stone',               ext: '.csv' },
+  { key: 'ofx',   label: 'Inter (OFX)',    desc: 'Extrato bancário exportado do app ou internet banking', ext: '.ofx' },
+  { key: 'rede',  label: 'Rede (CSV)',     desc: 'Relatório de vendas do portal Meu Posto Rede',          ext: '.csv' },
+  { key: 'stone', label: 'Stone (CSV)',    desc: 'Relatório de transações do portal Stone',               ext: '.csv' },
+  { key: 'pdf',   label: 'PDF / Imagem',  desc: 'Qualquer extrato em PDF ou foto — extraído por IA',     ext: '.pdf, .jpg, .png' },
 ]
 
 export default function ExtratoPage() {
@@ -24,7 +25,10 @@ export default function ExtratoPage() {
   })
 
   const importar = useMutation({
-    mutationFn: async (conteudo: string) => {
+    mutationFn: async ({ conteudo, mimeType }: { conteudo: string; mimeType?: string }) => {
+      if (origemSelecionada === 'pdf') {
+        return api.post('/extrato/importar/pdf', { conteudo, mimeType }).then(r => r.data)
+      }
       const endpoint = origemSelecionada === 'ofx' ? '/extrato/importar/ofx'
         : origemSelecionada === 'rede' ? '/extrato/importar/rede'
         : '/extrato/importar/stone'
@@ -39,9 +43,23 @@ export default function ExtratoPage() {
   function handleArquivo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => importar.mutate(ev.target?.result as string)
-    reader.readAsText(file, 'latin1')
+
+    if (origemSelecionada === 'pdf') {
+      const reader = new FileReader()
+      reader.onload = ev => {
+        const dataUrl = ev.target?.result as string
+        const commaIdx = dataUrl.indexOf(',')
+        const header   = dataUrl.substring(0, commaIdx)
+        const base64   = dataUrl.substring(commaIdx + 1)
+        const mimeType = header.match(/data:([^;]+)/)?.[1] ?? 'application/octet-stream'
+        importar.mutate({ conteudo: base64, mimeType })
+      }
+      reader.readAsDataURL(file)
+    } else {
+      const reader = new FileReader()
+      reader.onload = ev => importar.mutate({ conteudo: ev.target?.result as string })
+      reader.readAsText(file, 'latin1')
+    }
     e.target.value = ''
   }
 
@@ -70,14 +88,22 @@ export default function ExtratoPage() {
             </button>
           ))}
         </div>
-        <input ref={fileRef} type="file" className="hidden" accept=".ofx,.csv,.txt" onChange={handleArquivo} />
+        <input
+          ref={fileRef}
+          type="file"
+          className="hidden"
+          accept={origemSelecionada === 'pdf' ? '.pdf,.jpg,.jpeg,.png,.webp' : '.ofx,.csv,.txt'}
+          onChange={handleArquivo}
+        />
         <button
           className="btn-primary"
           onClick={() => fileRef.current?.click()}
           disabled={importar.isPending}
         >
           <Upload className="w-4 h-4" />
-          {importar.isPending ? 'Importando…' : `Selecionar arquivo ${ORIGENS.find(o => o.key === origemSelecionada)?.label}`}
+          {importar.isPending
+            ? (origemSelecionada === 'pdf' ? 'Analisando com IA…' : 'Importando…')
+            : `Selecionar arquivo ${ORIGENS.find(o => o.key === origemSelecionada)?.label}`}
         </button>
 
         {resultado && (
@@ -87,7 +113,9 @@ export default function ExtratoPage() {
         )}
         {importar.isError && (
           <div className="mt-3 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700">
-            Erro ao importar. Verifique se o arquivo está no formato correto.
+            {origemSelecionada === 'pdf'
+              ? 'Não foi possível extrair transações deste arquivo. Tente com uma imagem mais nítida ou um PDF legível.'
+              : 'Erro ao importar. Verifique se o arquivo está no formato correto.'}
           </div>
         )}
       </div>
